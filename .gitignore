@@ -40,3 +40,5 @@ htmlcov/
 cline_docs/
 venv
 
+webhooks.log
+
