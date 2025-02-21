@@ -1,0 +1,88 @@
+name: Semantic Versioning
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+    types: [closed]
+    branches:
+      - master
+      - main
+
+jobs:
+  tag-version:
+    if: github.event.pull_request.merged == true || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest tag
+        id: get-latest-tag
+        run: |
+          git fetch --tags
+          latest_tag=$(git describe --tags `git rev-list --tags --max-count=1` 2>/dev/null || echo "v0.0.0")
+          echo "LATEST_TAG=$latest_tag" >> $GITHUB_ENV
+
+      - name: Determine version bump
+        id: version-bump
+        run: |
+          # Get commit messages since last tag
+          commits=$(git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --pretty=format:"%s")
+          
+          # Initialize flags
+          major=false
+          minor=false
+          patch=false
+          
+          # Check commit messages for conventional commit prefixes
+          while IFS= read -r commit; do
+            if [[ $commit == "BREAKING CHANGE:"* ]] || [[ $commit == *"!"* ]]; then
+              major=true
+            elif [[ $commit == "feat:"* ]]; then
+              minor=true
+            elif [[ $commit == "fix:"* ]] || [[ $commit == "docs:"* ]] || [[ $commit == "style:"* ]] || [[ $commit == "refactor:"* ]]; then
+              patch=true
+            fi
+          done <<< "$commits"
+          
+          # Get current version numbers
+          IFS='.' read -r major_num minor_num patch_num < <(echo "${LATEST_TAG#v}" | tr -d 'v')
+          
+          # Determine version bump
+          if [ "$major" = true ]; then
+            major_num=$((major_num + 1))
+            minor_num=0
+            patch_num=0
+          elif [ "$minor" = true ]; then
+            minor_num=$((minor_num + 1))
+            patch_num=0
+          else
+            patch_num=$((patch_num + 1))
+          fi
+          
+          # Set new version
+          new_version="v$major_num.$minor_num.$patch_num"
+          echo "NEW_VERSION=$new_version" >> $GITHUB_ENV
+          echo "Bumping version from $LATEST_TAG to $new_version"
+
+      - name: Create and push tag
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag -a ${{ env.NEW_VERSION }} -m "Release ${{ env.NEW_VERSION }}"
+          git push origin ${{ env.NEW_VERSION }}
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.NEW_VERSION }}
+          name: Release ${{ env.NEW_VERSION }}
+          generate_release_notes: true
