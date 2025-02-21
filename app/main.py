@@ -5,6 +5,8 @@ from typing import Optional, Dict, Any
 
 from fastapi import FastAPI, Header, HTTPException, Request
 
+from ai_handler import process_message
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -22,7 +24,7 @@ class WebhookSource(str, Enum):
 
 app = FastAPI(
     title="Webhook Logger API",
-    description="An API that logs GitHub and GitLab webhook events for PR/MR",
+    description="An API that logs GitHub and GitLab webhook events for PR/MR and processes them with AI",
     version="1.0.0"
 )
 
@@ -31,13 +33,14 @@ async def read_root():
     """Return a hello world message."""
     return {"message": "Hello World"}
 
-async def log_webhook_payload(source: WebhookSource, event_type: str, payload: Dict[Any, Any]):
-    """Log webhook payload with metadata."""
+async def log_webhook_payload(source: WebhookSource, event_type: str, payload: Dict[Any, Any], ai_response: str):
+    """Log webhook payload with metadata and AI response."""
     log_entry = {
         "timestamp": datetime.utcnow().isoformat(),
         "source": source,
         "event_type": event_type,
-        "payload": payload
+        "payload": payload,
+        "ai_response": ai_response
     }
     logger.info(f"Received {source} webhook: {log_entry}")
 
@@ -54,9 +57,18 @@ async def github_webhook(
         raise HTTPException(status_code=400, detail="Unsupported GitHub event type")
 
     payload = await request.json()
-    await log_webhook_payload(WebhookSource.GITHUB, x_github_event, payload)
     
-    return {"status": "success", "message": f"GitHub {x_github_event} event logged"}
+    # Process the payload with AI
+    ai_response = await process_message(payload)
+    
+    # Log both payload and AI response
+    await log_webhook_payload(WebhookSource.GITHUB, x_github_event, payload, ai_response)
+    
+    return {
+        "status": "success",
+        "message": f"GitHub {x_github_event} event processed",
+        "ai_response": ai_response
+    }
 
 @app.post("/webhook/gitlab")
 async def gitlab_webhook(
@@ -71,6 +83,15 @@ async def gitlab_webhook(
         raise HTTPException(status_code=400, detail="Unsupported GitLab event type")
 
     payload = await request.json()
-    await log_webhook_payload(WebhookSource.GITLAB, x_gitlab_event, payload)
     
-    return {"status": "success", "message": f"GitLab {x_gitlab_event} event logged"}
+    # Process the payload with AI
+    ai_response = await process_message(payload)
+    
+    # Log both payload and AI response
+    await log_webhook_payload(WebhookSource.GITLAB, x_gitlab_event, payload, ai_response)
+    
+    return {
+        "status": "success",
+        "message": f"GitLab {x_gitlab_event} event processed",
+        "ai_response": ai_response
+    }
