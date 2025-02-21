@@ -1,6 +1,6 @@
-from typing import Dict, Any
 import logging
 from datetime import datetime
+from typing import Dict, Any
 
 from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
@@ -85,7 +85,7 @@ async def process_message(message: Dict[Any, Any]) -> str:
         formatted_prompt = chat_template.format_messages(input=prompt)
         
         # Get response
-        response = llm.invoke(formatted_prompt)
+        response = await llm.ainvoke(formatted_prompt)
         
         return response.content
         
